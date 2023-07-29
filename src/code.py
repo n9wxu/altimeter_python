@@ -8,6 +8,7 @@ import adafruit_bmp280
 import supervisor
 import microcontroller
 import os
+import gc
 
 # define the Hardware for the board
 sda1_pin = board.GP18
@@ -113,8 +114,6 @@ while loopTime < waitToLog:
     time.sleep(0.1)
 
 # open the file
-file = open(filename, "wt")
-print("Log File Created")
 # capture the time of the launch so we can subtract
 launchTime = supervisor.ticks_ms()
 print("Launch Time Set To: ", launchTime / 1000)
@@ -124,6 +123,13 @@ previous_sample_time = 0
 
 led.value = True  # turn on LED solid for the durration of the logging
 
+gc.collect()  # garbage collect the memory
+print(gc.mem_free())
+
+mission_data = []
+print(len(mission_data))
+
+print("flying")
 while logging == True:
     mission_time = (supervisor.ticks_ms() - launchTime) / 1000
 
@@ -133,14 +139,25 @@ while logging == True:
         pressure = bmp280.pressure
         agl = newAltitude - launchSiteAltitude
         altitude = newAltitude
-        data_string = "" + str(mission_time) + ", " + str(agl) + ", " + str(pressure)
-        print("Flight Time: " + data_string)
-        file.write(data_string + "\n")
-        os.sync()
+        try:
+            mission_data.append((mission_time, agl, pressure))
+        except Exception as e:
+            logging = False
 
-    if mission_time > 30:
+    if mission_time > 5:
         logging = False
+
+print("saving the data")
+file = open(filename, "wt")
+print("Log File Created")
+for d in mission_data:
+    data_string = str(d[0]) + "," + str(d[1]) + "," + str(d[2])
+    print("saving: " + data_string)
+    file.write(data_string + "\n")
 file.close()
+time.sleep(1)
+os.sync()
+
 led.value = False  # Turn off LED to indicate logging is complete
 
 
