@@ -144,7 +144,7 @@ while logging == True:
         except Exception as e:
             logging = False
 
-    if mission_time > 5:
+    if mission_time > 30:
         logging = False
 
 print("saving the data")
