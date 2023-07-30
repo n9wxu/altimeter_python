@@ -172,6 +172,7 @@ for d in mission_data:
     count += 1
 file.flush()
 file.close()
+os.sync()
 
 led.value = False  # Turn off LED to indicate logging is complete
 
