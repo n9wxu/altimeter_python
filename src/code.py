@@ -99,6 +99,9 @@ ramLimit = False
 flying = False
 logging = True
 launchTime = 0
+launchAltitude = 0
+peakAltitude = 0
+apogee = False
 # 200 data points to seed the pressure sum
 mission_data = []
 for i in range(0, history):
@@ -119,6 +122,8 @@ while logging:
 
         avgAltitude = makeAltitude(sum(mission_data[-history:]) / history)
         altitude = makeAltitude(sum(mission_data[-3:]) / 3)
+        if altitude > peakAltitude:
+            peakAltitude = altitude
 
         if not flying:
             mission_data.pop(0)
@@ -134,12 +139,19 @@ while logging:
                 # launch detector
                 if abs(altitude - avgAltitude) > 10:
                     launchTime = now
+                    launchAltitude = altitude
                     print("Launch")
                     print("Altitude : " + str(altitude))
                     print("avgAltitude : " + str(avgAltitude))
                     print("Launch Time Set To: ", launchTime)
                     flying = True
         else:
+
+            # apogee detector.  peak is 10 ft lower than average altitude
+            if not apogee and peakAltitude - avgAltitude > 10:
+                apogee = True
+                peakAltitude = peakAltitude - launchAltitude
+
             # landing detector
             print(altitude, avgAltitude, abs(altitude - avgAltitude))
             if abs(altitude - avgAltitude) < 1.0:
