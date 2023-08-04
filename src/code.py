@@ -102,6 +102,7 @@ launchTime = 0
 launchAltitude = 0
 peakAltitude = 0
 apogee = False
+temperature = bmp280.temperature
 # 200 data points to seed the pressure sum
 mission_data = []
 for i in range(0, history):
@@ -146,7 +147,6 @@ while logging:
                     print("Launch Time Set To: ", launchTime)
                     flying = True
         else:
-
             # apogee detector.  peak is 10 ft lower than average altitude
             if not apogee and peakAltitude - avgAltitude > 10:
                 apogee = True
@@ -179,6 +179,7 @@ file = open(filename, "wt")
 print("Log File Created")
 file.write("mission time = " + str(mission_time) + "\n")
 file.write("Maximum Altitude = " + str(peakAltitude) + "\n")
+file.write("temp," + str(temperature) + "\n")
 file.write("dt," + str(dT) + "\n")
 file.write("sample number, pressure\n")
 count = 0
