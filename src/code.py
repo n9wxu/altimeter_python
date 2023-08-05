@@ -42,6 +42,8 @@ fire1.switch_to_output(value=False)
 fire2 = DigitalInOut(fire2_pin)
 fire2.switch_to_output(value=False)
 
+uart = busio.UART(tx_pin, rx_pin, baudrate=115200)
+
 i2c = busio.I2C(scl0_pin, sda0_pin)
 bmp280 = adafruit_bmp280.Adafruit_BMP280_I2C(i2c, 0x77)
 
@@ -70,10 +72,20 @@ def makeAltitude(p) -> float:
 
 
 # simple function to test if a file is present
-def exists(f):
+def exists(f) -> bool:
     os.sync()
     if f in os.listdir("/"):
         print("found " + f)
+        return True
+    else:
+        return False
+
+
+def pyroTest() -> bool:
+    fire1.value = False
+    fire2.value = False
+    pyro_low.value = True
+    if sense1.value < 1000 and sense2.value < 1000:
         return True
     else:
         return False
@@ -110,6 +122,8 @@ for i in range(0, history):
 startTime = time.monotonic_ns()
 armed = False
 previousSample = 0
+lastTalk = 0
+
 while logging:
     now = time.monotonic_ns()
     if now - previousSample > 50000000:
@@ -123,6 +137,10 @@ while logging:
 
         avgAltitude = makeAltitude(sum(mission_data[-history:]) / history)
         altitude = makeAltitude(sum(mission_data[-3:]) / 3)
+
+        altitude = altitude
+        avgAltitude = avgAltitude
+
         if altitude > peakAltitude:
             peakAltitude = altitude
 
@@ -135,27 +153,53 @@ while logging:
             if not armed:
                 if (now - startTime) > 10000000000:
                     print("armed")
+                    uart.write("call n9wxu\n".encode())
+                    if pyroTest():
+                        uart.write("ready\n".encode())
+                    else:
+                        uart.write("fail\n".encode())
+                    lastTalk = now
                     armed = True
             else:
                 # launch detector
                 if abs(altitude - avgAltitude) > 10:
                     launchTime = now
                     launchAltitude = altitude
+                    uart.write("launch\n".encode())
+                    lastTalk = now
                     print("Launch")
                     print("Altitude : " + str(altitude))
                     print("avgAltitude : " + str(avgAltitude))
                     print("Launch Time Set To: ", launchTime)
                     flying = True
         else:
-            # apogee detector.  peak is 10 ft lower than average altitude
-            if not apogee and peakAltitude - avgAltitude > 10:
+            # apogee detector.  peak is 10 ft lower than current altitude
+            if not apogee and peakAltitude - altitude > 10:
                 apogee = True
-                peakAltitude = peakAltitude - launchAltitude
-
+                uart.write("apogee\n".encode())
+                uart.write(
+                    ("altitude " + str(peakAltitude - launchAltitude) + "\n").encode()
+                )
+                lastTalk = now
+            else:
+                if now - lastTalk > 2000000000:
+                    print(
+                        "altitude : "
+                        + str(int((altitude - launchAltitude) / 100) * 100)
+                    )
+                    uart.write(
+                        (
+                            "altitude "
+                            + str(int((altitude - launchAltitude) / 100) * 100)
+                            + "\n"
+                        ).encode()
+                    )
+                    lastTalk = now
             # landing detector
             print(altitude, avgAltitude, abs(altitude - avgAltitude))
             if abs(altitude - avgAltitude) < 1.0:
                 logging = False
+
             # maximum flight detector 10 minutes
             if now - launchTime > 600000000000:
                 logging = False
@@ -168,6 +212,11 @@ if len(mission_data):
 else:
     dT = 0.05
 
+altitude = altitude - launchAltitude
+avgAltitude = avgAltitude - launchAltitude
+peakAltitude = peakAltitude - launchAltitude
+
+uart.write("touchdown\n".encode())
 print(".")
 print("landed")
 print("Altitude : " + str(altitude))
