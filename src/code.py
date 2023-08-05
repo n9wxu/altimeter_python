@@ -145,6 +145,8 @@ armed = False
 noPyro2 = False
 previousSample = 0
 lastTalk = 0
+pyro1Index = 0
+pyro2Index = 0
 
 while logging:
     now = time.monotonic_ns()
@@ -204,10 +206,12 @@ while logging:
                     ("altitude " + str(peakAltitude - launchAltitude) + "\n").encode()
                 )
                 firePyro1()
+                pyro1Index = len(mission_data)
                 lastTalk = now
             else:
                 if apogee and not noPyro2 and altitude - launchAltitude < 500:
                     firePyro2()
+                    pyro2Index = len(mission_data)
                     noPyro2 = True
                     pyroFireTime = now
 
@@ -228,7 +232,6 @@ while logging:
                     )
                     lastTalk = now
             # landing detector
-            print(altitude, avgAltitude, abs(altitude - avgAltitude))
             if abs(altitude - avgAltitude) < 1.0:
                 logging = False
 
@@ -265,7 +268,12 @@ file.write("dt," + str(dT) + "\n")
 file.write("sample number, pressure\n")
 count = 0
 for d in mission_data:
-    file.write(str(count) + "," + str(d) + "\n")
+    file.write(str(count) + "," + str(d))
+    if count == pyro1Index:
+        file.write(", fire pyro 1")
+    if count == pyro2Index:
+        file.write(", fire pyro 2")
+    file.write("\n")
     count += 1
 file.flush()
 file.close()
