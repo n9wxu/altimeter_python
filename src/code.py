@@ -85,10 +85,30 @@ def pyroTest() -> bool:
     fire1.value = False
     fire2.value = False
     pyro_low.value = True
-    if sense1.value < 1000 and sense2.value < 1000:
-        return True
-    else:
-        return False
+    result = sense1.value < 1000 and sense2.value < 1000
+    pyro_low.value = False
+    return result
+
+
+def firePyro1():
+    print("pyro 1 fire")
+    uart.write("ignite 1\n".encode())
+    pyro_low.value = True
+    fire1.value = True
+
+
+def firePyro2():
+    print("pyro 2 fire")
+    uart.write("ignite 2\n".encode())
+    pyro_low.value = True
+    fire2.value = True
+
+
+def safeAllPyros():
+    print("pyro safe")
+    pyro_low.value = False
+    fire1.value = False
+    fire2.value = False
 
 
 if exists(filename):
@@ -113,6 +133,7 @@ logging = True
 launchTime = 0
 launchAltitude = 0
 peakAltitude = 0
+pyroFireTime = 0
 apogee = False
 temperature = bmp280.temperature
 # 200 data points to seed the pressure sum
@@ -121,6 +142,7 @@ for i in range(0, history):
     mission_data.append(bmp280.pressure)
 startTime = time.monotonic_ns()
 armed = False
+noPyro2 = False
 previousSample = 0
 lastTalk = 0
 
@@ -176,12 +198,22 @@ while logging:
             # apogee detector.  peak is 10 ft lower than current altitude
             if not apogee and peakAltitude - altitude > 10:
                 apogee = True
+                pyroFireTime = now
                 uart.write("apogee\n".encode())
                 uart.write(
                     ("altitude " + str(peakAltitude - launchAltitude) + "\n").encode()
                 )
+                firePyro1()
                 lastTalk = now
             else:
+                if apogee and not noPyro2 and altitude - launchAltitude < 500:
+                    firePyro2()
+                    noPyro2 = True
+                    pyroFireTime = now
+
+                if now - pyroFireTime > 500000000:
+                    safeAllPyros()
+
                 if now - lastTalk > 2000000000:
                     print(
                         "altitude : "
