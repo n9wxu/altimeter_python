@@ -1,0 +1,20 @@
+{
+    "units": "feet",
+    "launchDetect": 10,
+    "voiceEnable": true,
+    "logging": {
+        "pressure": true,
+        "altitude": false,
+        "temperature": false
+    },
+    "pyro1": {
+        "enable": false,
+        "trigger": "apogee",
+        "altitude": -10
+    },
+    "pyro2": {
+        "enable": true,
+        "trigger": "agl",
+        "altitude": 500
+    }
+}

@@ -6,14 +6,15 @@ from altimeter import makeAltitude
 # pick either pyro or test.  pyro uses the hardware.  Test uses a data file
 import pyro
 
+pyro = pyro.pyroHw()
+
 # import test
+# pyro = test.testSys()
 
 # configure the system
 flying = False
 
 filename = "data.csv"
-
-pyro = test.testSys()
 
 
 # simple function to test if a file is present
