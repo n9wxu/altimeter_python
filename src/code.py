@@ -1,74 +1,19 @@
-import board
 import time
-from digitalio import DigitalInOut, Direction, Pull
-import analogio
-import busio
-import storage
-import adafruit_bmp280
-import supervisor
-import microcontroller
 import os
 import gc
+from altimeter import makeAltitude
 
-# define the Hardware for the board
-sda1_pin = board.GP18
-scl1_pin = board.GP19
-sda0_pin = board.GP20
-scl0_pin = board.GP21
+# pick either pyro or test.  pyro uses the hardware.  Test uses a data file
+import pyro
 
-sense1_pin = board.A0
-sense2_pin = board.A1
-pixel_pin = board.GP1
-fire1_pin = board.GP9
-fire2_pin = board.GP11
-pyro_low_pin = board.GP10
-led_pin = board.GP25
-
-tx_pin = board.GP0
-rx_pin = board.GP1
+# import test
 
 # configure the system
 flying = False
 
-sense1 = analogio.AnalogIn(sense1_pin)
-sense2 = analogio.AnalogIn(sense2_pin)
-
-pyro_low = DigitalInOut(pyro_low_pin)
-pyro_low.switch_to_output(value=False)
-
-fire1 = DigitalInOut(fire1_pin)
-fire1.switch_to_output(value=False)
-
-fire2 = DigitalInOut(fire2_pin)
-fire2.switch_to_output(value=False)
-
-uart = busio.UART(tx_pin, rx_pin, baudrate=115200)
-
-i2c = busio.I2C(scl0_pin, sda0_pin)
-bmp280 = adafruit_bmp280.Adafruit_BMP280_I2C(i2c, 0x77)
-
-bmp280.sea_level_pressure = 1013.25
-bmp280.mode = adafruit_bmp280.MODE_NORMAL
-bmp280.standby_period = adafruit_bmp280.STANDBY_TC_500
-bmp280.iir_filter = adafruit_bmp280.IIR_FILTER_X16
-bmp280.overscan_pressure = adafruit_bmp280.OVERSCAN_X16
-bmp280.overscan_temperature = adafruit_bmp280.OVERSCAN_X2
-
 filename = "data.csv"
 
-# Setup LED
-led_pin = board.GP25
-led = DigitalInOut(led_pin)
-led.switch_to_output()
-
-
-# accepts hecaPascals and returns feet
-def makeAltitude(p) -> float:
-    # use the sea level and 15C to compute the current altitude
-    seaLevelPressure = 1013.25
-    temperature = 15.0 + 273.15
-    altitude = ((((seaLevelPressure / p) ** (1 / 5.257)) - 1) * temperature) / 0.0065
-    return altitude * 3.28084
+pyro = test.testSys()
 
 
 # simple function to test if a file is present
@@ -81,39 +26,9 @@ def exists(f) -> bool:
         return False
 
 
-def pyroTest() -> bool:
-    fire1.value = False
-    fire2.value = False
-    pyro_low.value = True
-    result = sense1.value < 1000 and sense2.value < 1000
-    pyro_low.value = False
-    return result
-
-
-def firePyro1():
-    print("pyro 1 fire")
-    uart.write("ignite 1\n".encode())
-    pyro_low.value = True
-    fire1.value = True
-
-
-def firePyro2():
-    print("pyro 2 fire")
-    uart.write("ignite 2\n".encode())
-    pyro_low.value = True
-    fire2.value = True
-
-
-def safeAllPyros():
-    print("pyro safe")
-    pyro_low.value = False
-    fire1.value = False
-    fire2.value = False
-
-
 if exists(filename):
     print("Standing by for file transfer. To fly and log, remove USB cable.")
-    while True:
+    while exists(filename):
         led.value = True
         time.sleep(0.1)
         led.value = False
@@ -121,7 +36,7 @@ if exists(filename):
 
 loopTime = 0
 
-led.value = True  # turn on LED solid for the durration of the logging
+pyro.ledOn()
 
 gc.collect()  # garbage collect the memory
 
@@ -131,15 +46,17 @@ ramLimit = False
 flying = False
 logging = True
 launchTime = 0
-launchAltitude = 0
-peakAltitude = 0
 pyroFireTime = 0
 apogee = False
-temperature = bmp280.temperature
+temperature = pyro.readTemperature()
 # 200 data points to seed the pressure sum
 mission_data = []
 for i in range(0, history):
-    mission_data.append(bmp280.pressure)
+    mission_data.append(pyro.readPressure())
+
+launchAltitude = makeAltitude(sum(mission_data[-history:]) / history)
+peakAGL = 0
+
 startTime = time.monotonic_ns()
 armed = False
 noPyro2 = False
@@ -154,7 +71,7 @@ while logging:
         previousSample = now
 
         try:
-            mission_data.append(bmp280.pressure)
+            mission_data.append(pyro.readPressure())
         except Exception as e:
             ramLimit = True
             logging = False
@@ -162,11 +79,11 @@ while logging:
         avgAltitude = makeAltitude(sum(mission_data[-history:]) / history)
         altitude = makeAltitude(sum(mission_data[-3:]) / 3)
 
-        altitude = altitude
-        avgAltitude = avgAltitude
+        agl = altitude - launchAltitude
+        avgAgl = avgAltitude - launchAltitude
 
-        if altitude > peakAltitude:
-            peakAltitude = altitude
+        if agl > peakAGL:
+            peakAGL = agl
 
         if not flying:
             mission_data.pop(0)
@@ -177,62 +94,54 @@ while logging:
             if not armed:
                 if (now - startTime) > 10000000000:
                     print("armed")
-                    uart.write("call n9wxu\n".encode())
-                    if pyroTest():
-                        uart.write("ready\n".encode())
+                    pyro.speak("call n9wxu")
+                    if pyro.pyroTest():
+                        pyro.speak("ready")
                     else:
-                        uart.write("fail\n".encode())
+                        pyro.speak("fail")
                     lastTalk = now
                     armed = True
             else:
                 # launch detector
-                if abs(altitude - avgAltitude) > 10:
+                if abs(agl - avgAgl) > 10:
                     launchTime = now
-                    launchAltitude = altitude
-                    uart.write("launch\n".encode())
+                    pyro.speak("launch")
                     lastTalk = now
                     print("Launch")
-                    print("Altitude : " + str(altitude))
-                    print("avgAltitude : " + str(avgAltitude))
+                    print("Altitude : " + str(agl))
+                    print("avgAltitude : " + str(avgAgl))
+                    print("Launch Altitide : " + str(launchAltitude))
                     print("Launch Time Set To: ", launchTime)
                     flying = True
         else:
-            # apogee detector.  peak is 10 ft lower than current altitude
-            if not apogee and peakAltitude - altitude > 10:
+            # apogee detector.  peak is 10 ft higher than current altitude
+            if not apogee and ((peakAGL - agl) > 10):
                 apogee = True
                 pyroFireTime = now
-                uart.write("apogee\n".encode())
-                uart.write(
-                    ("altitude " + str(peakAltitude - launchAltitude) + "\n").encode()
-                )
-                firePyro1()
+                pyro.speak("apogee")
+                pyro.speak("altitude " + str(peakAGL))
+                print("altitude " + str(agl) + " : ", end="")
+                pyro.firePyro1()
                 pyro1Index = len(mission_data)
                 lastTalk = now
             else:
-                if apogee and not noPyro2 and altitude - launchAltitude < 500:
-                    firePyro2()
+                if apogee and not noPyro2 and agl < 500:
+                    print("altitude " + str(agl) + " : ", end="")
+                    pyro.firePyro2()
                     pyro2Index = len(mission_data)
                     noPyro2 = True
                     pyroFireTime = now
 
-                if now - pyroFireTime > 500000000:
-                    safeAllPyros()
+                if pyroFireTime and now - pyroFireTime > 500000000:
+                    pyro.safeAllPyros()
+                    pyroFireTime = 0
 
                 if now - lastTalk > 2000000000:
-                    print(
-                        "altitude : "
-                        + str(int((altitude - launchAltitude) / 100) * 100)
-                    )
-                    uart.write(
-                        (
-                            "altitude "
-                            + str(int((altitude - launchAltitude) / 100) * 100)
-                            + "\n"
-                        ).encode()
-                    )
+                    print("altitude : " + str(int((agl) / 100) * 100))
+                    pyro.speak("altitude " + str(int((agl) / 100) * 100))
                     lastTalk = now
             # landing detector
-            if abs(altitude - avgAltitude) < 1.0:
+            if abs(agl - avgAgl) < 1.0:
                 logging = False
 
             # maximum flight detector 10 minutes
@@ -247,22 +156,18 @@ if len(mission_data):
 else:
     dT = 0.05
 
-altitude = altitude - launchAltitude
-avgAltitude = avgAltitude - launchAltitude
-peakAltitude = peakAltitude - launchAltitude
-
-uart.write("touchdown\n".encode())
+pyro.speak("touchdown")
 print(".")
 print("landed")
-print("Altitude : " + str(altitude))
-print("avgAltitude : " + str(avgAltitude))
+print("Altitude : " + str(agl))
+print("avgAltitude : " + str(avgAgl))
 print("mission elapsed time : " + str(mission_time))
-print("maximum Altitude : " + str(peakAltitude))
+print("maximum Altitude : " + str(peakAGL))
 print("saving the data")
 file = open(filename, "wt")
 print("Log File Created")
 file.write("mission time = " + str(mission_time) + "\n")
-file.write("Maximum Altitude = " + str(peakAltitude) + "\n")
+file.write("Maximum Altitude = " + str(peakAGL) + "\n")
 file.write("temp," + str(temperature) + "\n")
 file.write("dt," + str(dT) + "\n")
 file.write("sample number, pressure\n")
@@ -277,14 +182,7 @@ for d in mission_data:
     count += 1
 file.flush()
 file.close()
-os.sync()
 
-led.value = False  # Turn off LED to indicate logging is complete
+pyro.ledOff()
 
-
-print("Finished")
-while True:
-    led.value = True
-    time.sleep(0.5)
-    led.value = False
-    time.sleep(0.5)
+pyro.finish()
