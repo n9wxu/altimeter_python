@@ -30,9 +30,9 @@ def exists(f) -> bool:
 if exists(filename):
     print("Standing by for file transfer. To fly and log, remove USB cable.")
     while exists(filename):
-        led.value = True
+        pyro.ledOn()
         time.sleep(0.1)
-        led.value = False
+        pyro.ledOff()
         time.sleep(0.1)
 
 loopTime = 0
