@@ -40,10 +40,11 @@ class pyroHw:
         self.bmp280 = adafruit_bmp280.Adafruit_BMP280_I2C(self.i2c, 0x77)
         self.bmp280.sea_level_pressure = 1013.25
         self.bmp280.mode = adafruit_bmp280.MODE_NORMAL
-        self.bmp280.standby_period = adafruit_bmp280.STANDBY_TC_500
-        self.bmp280.iir_filter = adafruit_bmp280.IIR_FILTER_X16
-        self.bmp280.overscan_pressure = adafruit_bmp280.OVERSCAN_X16
+        self.bmp280.standby_period = adafruit_bmp280.STANDBY_TC_0_5
+        self.bmp280.iir_filter = adafruit_bmp280.IIR_FILTER_X2
+        self.bmp280.overscan_pressure = adafruit_bmp280.OVERSCAN_X2
         self.bmp280.overscan_temperature = adafruit_bmp280.OVERSCAN_X2
+        time.sleep(1)
 
     def ledOn(self):
         self.led.value = True
@@ -78,7 +79,8 @@ class pyroHw:
         self.fire2.value = False
 
     def readPressure(self) -> float:
-        return self.bmp280.pressure
+        p = self.bmp280.pressure
+        return p
 
     def speak(self, msg):
         self.uart.write((msg + "\n").encode())

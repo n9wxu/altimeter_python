@@ -10,9 +10,10 @@ class testSys:
     def readPressure(self) -> float:
         try:
             l = float(self.data.readline())
-            lastPressure = l
+            self.lastPressure = l
         except Exception as e:
-            l = lastPressure
+            print("ran out of file")
+            exit()
         return l
 
     def ledOff(self):

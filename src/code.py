@@ -4,12 +4,14 @@ import gc
 from altimeter import makeAltitude
 
 # pick either pyro or test.  pyro uses the hardware.  Test uses a data file
-import pyro
+if 1:
+    import pyro
 
-pyro = pyro.pyroHw()
+    pyro = pyro.pyroHw()
+else:
+    import test
 
-# import test
-# pyro = test.testSys()
+    pyro = test.testSys()
 
 # configure the system
 flying = False
@@ -50,10 +52,19 @@ launchTime = 0
 pyroFireTime = 0
 apogee = False
 temperature = pyro.readTemperature()
+
 # 200 data points to seed the pressure sum
 mission_data = []
 for i in range(0, history):
-    mission_data.append(pyro.readPressure())
+    p = pyro.readPressure()
+    mission_data.append(p)
+    print(
+        str(p)
+        + " : "
+        + str(makeAltitude(sum(mission_data[-len(mission_data) :]) / len(mission_data)))
+        + " : "
+        + str(len(mission_data))
+    )
 
 launchAltitude = makeAltitude(sum(mission_data[-history:]) / history)
 peakAGL = 0
@@ -66,14 +77,27 @@ lastTalk = 0
 pyro1Index = 0
 pyro2Index = 0
 
+
+def milliSeconds(ms) -> int:
+    return ms * 1000000
+
+
+def seconds(s) -> int:
+    return s * milliSeconds(1000)
+
+
+print("starting the loop")
+
 while logging:
     now = time.monotonic_ns()
-    if now - previousSample > 50000000:
+    if now - previousSample > milliSeconds(50):
         previousSample = now
 
         try:
-            mission_data.append(pyro.readPressure())
+            p = pyro.readPressure()
+            mission_data.append(p)
         except Exception as e:
+            print("exception : " + str(e))
             ramLimit = True
             logging = False
 
@@ -91,9 +115,9 @@ while logging:
             launchTime = (
                 now  # keep updating the launchTime.  This will stop when we are saving.
             )
-            # sit on the pad for 10 seconds
+            # sit on the pad for 1 seconds
             if not armed:
-                if (now - startTime) > 10000000000:
+                if (now - startTime) > seconds(1):
                     print("armed")
                     pyro.speak("call n9wxu")
                     if pyro.pyroTest():
@@ -148,7 +172,6 @@ while logging:
             # maximum flight detector 10 minutes
             if now - launchTime > 600000000000:
                 logging = False
-
 
 flying = False
 mission_time = (now - launchTime) / 1000000000
