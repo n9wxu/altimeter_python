@@ -37,7 +37,7 @@ class pyroHw:
         self.fire2.switch_to_output(value=False)
         self.uart = busio.UART(self.tx_pin, self.rx_pin, baudrate=115200)
         self.i2c = busio.I2C(self.scl0_pin, self.sda0_pin)
-        self.bmp280 = adafruit_bmp280.Adafruit_BMP280_I2C(i2c, 0x77)
+        self.bmp280 = adafruit_bmp280.Adafruit_BMP280_I2C(self.i2c, 0x77)
         self.bmp280.sea_level_pressure = 1013.25
         self.bmp280.mode = adafruit_bmp280.MODE_NORMAL
         self.bmp280.standby_period = adafruit_bmp280.STANDBY_TC_500
@@ -84,7 +84,7 @@ class pyroHw:
         self.uart.write((msg + "\n").encode())
 
     def readTemperature(self) -> float:
-        return bmp280.temperature
+        return self.bmp280.temperature
 
     def finish(self):
         print("finished")
