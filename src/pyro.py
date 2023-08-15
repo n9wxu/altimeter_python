@@ -6,7 +6,7 @@ import adafruit_bmp280
 import time
 
 
-def pyroHw():
+class pyroHw:
     # define the Hardware for the board
     def __init__(self):
         self.sda1_pin = board.GP18
