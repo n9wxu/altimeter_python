@@ -1,49 +1,22 @@
 import time
 import os
 import gc
+from config import configuration
 from altimeter import makeAltitude
 
-# pick either pyro or test.  pyro uses the hardware.  Test uses a data file
-if 1:
-    import pyro
+import save
+import pyro
 
-    pyro = pyro.pyroHw()
-else:
-    import test
+pyro = pyro.pyroHw()
 
-    pyro = test.testSys()
-
-# configure the system
-flying = False
-
-filename = "data.csv"
-
-
-# simple function to test if a file is present
-def exists(f) -> bool:
-    os.sync()
-    if f in os.listdir("/"):
-        print("found " + f)
-        return True
-    else:
-        return False
-
-
-if exists(filename):
-    print("Standing by for file transfer. To fly and log, remove USB cable.")
-    while exists(filename):
-        pyro.ledOn()
-        time.sleep(0.1)
-        pyro.ledOff()
-        time.sleep(0.1)
+config = configuration()
 
 loopTime = 0
 
 pyro.ledOn()
 
-gc.collect()  # garbage collect the memory
-
-history = 20
+history = config.getHistory()
+launchDetectAltitude = config.getLaunchDetection()
 
 ramLimit = False
 flying = False
@@ -58,13 +31,8 @@ mission_data = []
 for i in range(0, history):
     p = pyro.readPressure()
     mission_data.append(p)
-    print(
-        str(p)
-        + " : "
-        + str(makeAltitude(sum(mission_data[-len(mission_data) :]) / len(mission_data)))
-        + " : "
-        + str(len(mission_data))
-    )
+    print(str(p) + " : " + str(makeAltitude(p)) + " : " + str(len(mission_data)))
+    time.sleep(0.050)
 
 launchAltitude = makeAltitude(sum(mission_data[-history:]) / history)
 peakAGL = 0
@@ -78,19 +46,16 @@ pyro1Index = 0
 pyro2Index = 0
 
 
-def milliSeconds(ms) -> int:
-    return ms * 1000000
-
-
-def seconds(s) -> int:
-    return s * milliSeconds(1000)
+def getTimeMs() -> int:
+    now = time.monotonic_ns() - startTime
+    return now / 1000000
 
 
 print("starting the loop")
 
 while logging:
-    now = time.monotonic_ns()
-    if now - previousSample > milliSeconds(50):
+    now = getTimeMs()
+    if now - previousSample > 50:
         previousSample = now
 
         try:
@@ -111,13 +76,11 @@ while logging:
             peakAGL = agl
 
         if not flying:
-            mission_data.pop(0)
-            launchTime = (
-                now  # keep updating the launchTime.  This will stop when we are saving.
-            )
+            while len(mission_data) > history:
+                mission_data.pop(0)
             # sit on the pad for 1 seconds
             if not armed:
-                if (now - startTime) > seconds(1):
+                if now > 1000:
                     print("armed")
                     pyro.speak("call n9wxu")
                     if pyro.pyroTest():
@@ -128,7 +91,7 @@ while logging:
                     armed = True
             else:
                 # launch detector
-                if abs(agl - avgAgl) > 10:
+                if abs(agl - avgAgl) > launchDetectAltitude:
                     launchTime = now
                     pyro.speak("launch")
                     lastTalk = now
@@ -161,20 +124,21 @@ while logging:
                     pyro.safeAllPyros()
                     pyroFireTime = 0
 
-                if now - lastTalk > 2000000000:
+                if now - lastTalk > 2000:
                     print("altitude : " + str(int((agl) / 100) * 100))
                     pyro.speak("altitude " + str(int((agl) / 100) * 100))
                     lastTalk = now
             # landing detector
-            if abs(agl - avgAgl) < 1.0:
+            if avgAgl < 5.0:
                 logging = False
 
-            # maximum flight detector 10 minutes
-            if now - launchTime > 600000000000:
+            # maximum flight detector 1 minutes
+            if now - launchTime > 60000:
+                print("out of time")
                 logging = False
 
 flying = False
-mission_time = (now - launchTime) / 1000000000
+mission_time = float((now - launchTime)) / 1000.0
 if len(mission_data):
     dT = mission_time / len(mission_data)
 else:
@@ -188,24 +152,17 @@ print("avgAltitude : " + str(avgAgl))
 print("mission elapsed time : " + str(mission_time))
 print("maximum Altitude : " + str(peakAGL))
 print("saving the data")
-file = open(filename, "wt")
-print("Log File Created")
-file.write("mission time = " + str(mission_time) + "\n")
-file.write("Maximum Altitude = " + str(peakAGL) + "\n")
-file.write("temp," + str(temperature) + "\n")
-file.write("dt," + str(dT) + "\n")
-file.write("sample number, pressure\n")
-count = 0
-for d in mission_data:
-    file.write(str(count) + "," + str(d))
-    if count == pyro1Index:
-        file.write(", fire pyro 1")
-    if count == pyro2Index:
-        file.write(", fire pyro 2")
-    file.write("\n")
-    count += 1
-file.flush()
-file.close()
+
+save.write(
+    "data.csv",
+    mission_data,
+    mission_time,
+    peakAGL,
+    pyro1Index,
+    pyro2Index,
+    temperature,
+    dT,
+)
 
 pyro.ledOff()
 

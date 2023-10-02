@@ -2,7 +2,7 @@ class testSys:
     lastPressure = 0.0
 
     def __init__(self):
-        self.data = open("../test.txt", "rt")
+        self.data = open("test.txt", "rt")
 
     def ledOn(self):
         print("LED ON")

@@ -2,6 +2,7 @@
     "units": "feet",
     "launchDetect": 10,
     "voiceEnable": true,
+    "history": 20,
     "logging": {
         "pressure": true,
         "altitude": false,
