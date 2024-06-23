@@ -45,11 +45,16 @@ lastTalk = 0
 pyro1Index = 0
 pyro2Index = 0
 
+EmaCount = 0 #this counter counds samples used in the EMA filter. This will be reset when launch is detected.
+EmaFilterFactor = 0.2
 
 def getTimeMs() -> int:
     now = time.monotonic_ns() - startTime
     return now / 1000000
 
+def ExpenentialMovingAverage(latest_altitude_sample, EmaFilterFactor=0.2)
+    emaAltitude = (latest_altitude_sample * (EmaFilterFactor(1+EmaCount)) + avgAltitude(1-(EmaFilterFactor/1+EmaCount)))
+    return emaAltitude
 
 print("starting the loop")
 
@@ -66,8 +71,12 @@ while logging:
             ramLimit = True
             logging = False
 
-        avgAltitude = makeAltitude(sum(mission_data[-history:]) / history)
         altitude = makeAltitude(sum(mission_data[-3:]) / 3)
+
+        # avgAltitude = makeAltitude(sum(mission_data[-history:]) / history) // This version is a basic average. 
+        # Exponential Moving Agerage
+        avgAltitude = ExpenentialMovingAverage(altitude, EmaFilterFactor=0.2)
+        
 
         agl = altitude - launchAltitude
         avgAgl = avgAltitude - launchAltitude
@@ -91,7 +100,7 @@ while logging:
                     armed = True
             else:
                 # launch detector
-                if abs(agl - avgAgl) > launchDetectAltitude:
+                if abs(agl - avgAgl) > launchDetectAltitude: and flying = false
                     launchTime = now
                     pyro.speak("launch")
                     lastTalk = now
@@ -101,6 +110,9 @@ while logging:
                     print("Launch Altitide : " + str(launchAltitude))
                     print("Launch Time Set To: ", launchTime)
                     flying = True
+                
+                    EmaCount = 0 # This line and the next is a two part reset the average starting at launch altitude. This may not be neccisary.
+                    avgAltitude = ExpenentialMovingAverage(launchAltitude, EmaFilterFactor=0.2) #Repriming the average with the launch altitude
         else:
             # apogee detector.  peak is 10 ft higher than current altitude
             if not apogee and ((peakAGL - agl) > 10):
