@@ -1,6 +1,6 @@
 {
     "units": "feet",
-    "launchDetect": 10,
+    "launchDetect": 100,
     "voiceEnable": true,
     "history": 20,
     "logging": {
@@ -9,7 +9,7 @@
         "temperature": false
     },
     "pyro1": {
-        "enable": false,
+        "enable": true,
         "trigger": "apogee",
         "altitude": -10
     },
