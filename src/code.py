@@ -90,12 +90,13 @@ while logging:
             # sit on the pad for 1 seconds
             if not armed:
                 if now > 1000:
-                    print("armed")
-                    pyro.speak("call n9wxu")
+                    pyro.speak("call n9rgk")
                     if pyro.pyroTest():
                         pyro.speak("ready")
+                        print("armed")
                     else:
                         pyro.speak("fail")
+                        print("pyro fail")
                     lastTalk = now
                     armed = True
             else:
@@ -125,7 +126,7 @@ while logging:
                 pyro1Index = len(mission_data)
                 lastTalk = now
             else:
-                if apogee and not noPyro2 and agl < 500:
+                if apogee and agl < 500:
                     print("altitude " + str(agl) + " : ", end="")
                     pyro.firePyro2()
                     pyro2Index = len(mission_data)
@@ -143,9 +144,10 @@ while logging:
             # landing detector
             if avgAgl < 5.0:
                 logging = False
+                pyro.safeAllPyros()
 
-            # maximum flight detector 1 minutes
-            if now - launchTime > 60000:
+            # maximum flight detector 10 minutes
+            if now - launchTime > 600000:
                 print("out of time")
                 logging = False
 
